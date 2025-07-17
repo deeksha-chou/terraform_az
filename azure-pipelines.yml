@@ -1,19 +1,65 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
+  branches:
+    include:
+      - main
+      - dev
+
+pr:
+  branches:
+    include:
+      - main
+      - dev
+
+variables:
+  TF_VERSION: '1.6.6'
+  AWS_REGION: 'us-east-1'
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'ubuntu-latest'
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+stages:
+- stage: Terraform
+  jobs:
+  - job: TerraformJob
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    - checkout: self
+
+    - script: |
+        echo "Installing AWS CLI v2..."
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip awscliv2.zip
+        sudo ./aws/install --update
+
+        echo "Installing session manager plugin (for AWS SSO)..."
+        curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
+        sudo dpkg -i session-manager-plugin.deb
+      displayName: "Install AWS CLI and session plugin"
+
+    - script: |
+        echo "Configuring AWS SSO login..."
+        aws sso login --profile Terraform-admin
+      displayName: "AWS SSO Login"
+
+    - script: |
+        terraform init -backend-config="bucket=myterraforms3bucketcloud" \
+                       -backend-config="key=envs/dev/terraform.tfstate" \
+                       -backend-config="region=$(AWS_REGION)" \
+                       -backend-config="profile=Terraform-admin"
+      displayName: 'Terraform Init'
+
+    - script: terraform fmt -check
+      displayName: 'Check Terraform Format'
+
+    - script: terraform validate
+      displayName: 'Terraform Validate'
+
+    - script: terraform plan -out=tfplan
+      displayName: 'Terraform Plan'
