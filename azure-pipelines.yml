@@ -1,4 +1,10 @@
 - task: AWSShellScript@1
+- task: S3Download@1
+  inputs:
+    awsCredentials: 'aws-service'
+    regionName: 'eu-south-1'
+    bucketName: 'myterraforms3bucketcloud'
+    globExpressions: '**'
   inputs:
     awsCredentials: 'aws-service'
     regionName: 'eu-south-1'
